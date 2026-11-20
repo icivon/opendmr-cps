@@ -21,9 +21,6 @@ Current version **0.7.1** ([changelog](CHANGELOG.md)).
 - 中文 / English / Español interface, dark mode
 - Radio themes: your own colours, the built-in ones recoloured or hidden, previewed on the radio's own screens
   (OpenDMR 0.6.0 and later)
-- Choose APRS symbols from the standard primary `/` and alternate `\` tables; the radio's original symbol codes remain unchanged when reading and writing
-
-APRS symbol descriptions are based on [aprs-symbol-index](https://github.com/hessu/aprs-symbol-index) by Hessu Hannikainen, licensed under CC BY-SA 4.0.
 
 ## Use
 
