@@ -1,5 +1,16 @@
 # Changelog / 版本记录
 
+## 0.9.0 (2026-11-19)
+
+- Themes page: make your own colour themes for the radio (up to 8), recolour a built-in theme or hide it from the
+  radio's menu, previewed on the radio's own screens (home, menu, display options, quick menu, FM radio), with a
+  warning for colour pairs that may be hard to read. Needs OpenDMR 0.6.0.
+  主题页：给电台新建自己的配色（最多 8 个），给自带主题改色或在电台菜单里隐藏，在电台自己的屏幕上（主界面、菜单、显示设置、快捷菜单、
+  收音机）预览；对比度太低的颜色会提示。需要 OpenDMR 0.6.0。
+- Spanish interface, and the radio's menu language (English, Chinese, Spanish) in the radio settings; thanks to
+  vargasmiguel ([#7](https://github.com/va3bpf/opendmr-cps/pull/7)).
+  西班牙语界面，电台设置里可以选电台菜单的语言（英文、中文、西班牙语）；感谢 vargasmiguel。
+
 ## 0.8.3 (2026-11-18)
 
 - Channels and contacts: delete many at once. Tick them (the box in the header ticks all those the filter shows),

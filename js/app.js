@@ -11,6 +11,8 @@ import {GROUPS, SETTINGS, SETTINGS_SIZE} from './codeplug/settings.js';
 import {language} from './i18n.js';
 import {VERSION} from './version.js';
 import * as SAT from './codeplug/satellites.js';
+import * as TH from './codeplug/themes.js';
+import {SCREENS, SCREEN_WIDTH, SCREEN_HEIGHT} from './ui/screens.js';
 import * as DMR from './codeplug/dmrids.js';
 import * as ODDB from './codeplug/oddb.js';
 import * as gb from './gb2312.js';
@@ -231,7 +233,7 @@ function render() {
     main.replaceChildren();
     ({channels: viewChannels, zones: viewZones, contacts: viewContacts, rxGroups: viewRxGroups, vfo: viewVfo,
         general: viewGeneral, radioSettings: viewRadioSettings, satellites: viewSatellites, dmrIds: viewDmrIds,
-        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug})[tab](main);
+        lockouts: viewLockouts, aprs: viewAprs, debug: viewDebug, themes: viewThemes})[tab](main);
 }
 
 function pageHead(title, ...rest) {
@@ -1207,12 +1209,11 @@ async function writeOddb(db) {
     if (changed.length || !headerSame) {
         const all = changed.length + 2;
         const put = async (s, n) => {
-            await link.writeSector(s.sector, s.data);
-            if ((await link.sectorCrc(s.sector * ODDB.SECTOR)) !== ODDB.crc32(s.data)) {
-                throw new Error(`sector 0x${(s.sector * ODDB.SECTOR).toString(16)}: read back different`);
-            }
+            await link.writeVerifiedSector(s.sector, s.data, (baud) => {
+                status(t('idRetrySlower').replace('{baud}', baud));
+            });
             progress(n, all);
-            status(`${t('idWriting')} ${Math.floor(100 * n / all)}%`);
+            status(`${t('idWriting')} ${Math.floor(100 * n / all)}% (${link.baud} baud)`);
         };
         await put({sector: header.sector, data: new Uint8Array(ODDB.SECTOR).fill(0xFF)}, 1); // no database meanwhile
         for (let i = 0; i < changed.length; i++) {
@@ -1220,7 +1221,6 @@ async function writeOddb(db) {
         }
         await put(header, all);
     }
-    await link.closeScreen();
     return changed.length;
 }
 
@@ -1230,9 +1230,8 @@ async function writeOldFormat(plan) {
     for (let i = 0; i < db.sectors.length; i++) {
         await link.writeSector(db.sectors[i].sector, db.sectors[i].data);
         progress(i + 1, db.sectors.length);
-        status(`${t('idWriting')} ${Math.floor(100 * (i + 1) / db.sectors.length)}%`);
+        status(`${t('idWriting')} ${Math.floor(100 * (i + 1) / db.sectors.length)}% (${link.baud} baud)`);
     }
-    await link.closeScreen();
     return db.count;
 }
 
@@ -1241,6 +1240,7 @@ async function writeDmrIds() {
         return;
     }
     dmrIdBusy = true;
+    let transferStarted = false;
     $('btnRead').disabled = true;
     $('btnWrite').disabled = true;
     render();
@@ -1255,6 +1255,7 @@ async function writeDmrIds() {
             if (!window.confirm(t('idWriteConfirmNew').replace('{n}', plan.db.records).replace('{m}', oddbMinutes(plan.db)))) {
                 return;
             }
+            transferStarted = true;
             const written = await writeOddb(plan.db);
             status(`${t('idWritten')}: ${plan.db.records} ${t('idEntries')} (${written} ${t('idSectorsChanged')})`);
         } else {
@@ -1265,6 +1266,7 @@ async function writeDmrIds() {
             if (!window.confirm(t('idWriteConfirmOld').replace('{n}', plan.count).replace('{m}', plan.minutes))) {
                 return;
             }
+            transferStarted = true;
             const count = await writeOldFormat(plan);
             status(`${t('idWritten')}: ${count} ${t('idEntries')}`);
         }
@@ -1275,7 +1277,10 @@ async function writeDmrIds() {
     } finally {
         progress(0, 0);
         try {
-            await link.speedDown(); // the radio is back at 115200 by itself after 5 s of quiet
+            if (transferStarted && link?.connected) {
+                await link.speedDown(); // the radio is back at 115200 by itself after 5 s of quiet
+                await link.closeScreen();
+            }
         } catch (e) {
             // the port went away
         }
@@ -1345,8 +1350,13 @@ function viewDmrIds(main) {
 
 function viewRadioSettings(main) {
     const s = codeplug.settings;
-    const zh = language() === 'zh';
-    const label = (x) => (Array.isArray(x) ? x[zh ? 1 : 0] : x);
+    const l = language();
+    const label = (x) => {
+        if (!Array.isArray(x)) return x;
+        if (l === 'zh') return x[1];
+        if (l === 'es') return x[2] ?? x[0];
+        return x[0];
+    };
     main.append(pageHead(t('radioSettings')));
     if (!s.valid) {
         main.append(el('div', {class: 'card empty'}, t('settingsInvalid')));
@@ -1358,7 +1368,7 @@ function viewRadioSettings(main) {
     function control(item) {
         const value = s.get(item.id);
         if (item.c) {
-            return select(item.c.map(([v, en, cn]) => [v, zh ? cn : en]), value, (v) => change(item, +v));
+            return select(item.c.map(([v, en, cn, es]) => [v, l === 'zh' ? cn : (l === 'es' ? (es ?? en) : en)]), value, (v) => change(item, +v));
         }
         if (item.input || !item.f) {
             const [lo, hi] = item.n;
@@ -1401,11 +1411,11 @@ function viewRadioSettings(main) {
         const rows = el('div', {class: 'set-rows'});
         for (const item of g.items) {
             const box = el('div', {class: 'set-control'});
-            const row = el('div', {class: 'set-row'}, el('label', {}, zh ? item.zh : item.en), box);
+            const row = el('div', {class: 'set-row'}, el('label', {}, l === 'zh' ? item.zh : (l === 'es' ? (item.es ?? item.en) : item.en)), box);
             controls.push({item, row, box});
             rows.append(row);
         }
-        grid.append(el('div', {class: 'card set-card'}, el('div', {class: 'card-head'}, el('h3', {}, zh ? g.zh : g.en)), rows));
+        grid.append(el('div', {class: 'card set-card'}, el('div', {class: 'card-head'}, el('h3', {}, l === 'zh' ? g.zh : (l === 'es' ? (g.es ?? g.en) : g.en))), rows));
     }
     main.append(el('div', {class: 'settings-scroll'}, grid));
     refresh();
@@ -2228,6 +2238,249 @@ function viewSatellites(main) {
         ];
     }
 
+    draw();
+}
+
+/* ---- themes: the radio's colours ---- */
+
+// The theme being edited ({builtin: id} or {user: id}) and the screen of the preview
+let themePick = {builtin: 0};
+let themeScreen = 'vfo';
+const screenCache = new Map(); // 'vfo/dark' -> the frame buffer's bytes
+
+async function screenBytes(name, kind) {
+    const key = `${name}/${kind}`;
+    if (!screenCache.has(key)) {
+        const packed = Uint8Array.from(atob(SCREENS[name][kind]), (c) => c.charCodeAt(0));
+        const stream = new Blob([packed]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+        screenCache.set(key, new Uint8Array(await new Response(stream).arrayBuffer()));
+    }
+    return screenCache.get(key);
+}
+
+// A screen of the radio in these colours: the frame buffer's palette indexes coloured (the capture under a theme as
+// dark as this one: its text edges took such colours)
+async function drawScreen(canvas, colours, dark) {
+    const bytes = await screenBytes(themeScreen, dark ? 'dark' : 'light');
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
+    const rgb = colours.map((c) => [(c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF]);
+    for (let i = 0; i < bytes.length; i++) {
+        for (const [k, idx] of [[0, bytes[i] >> 4], [1, bytes[i] & 0x0F]]) {
+            const o = ((2 * i) + k) * 4;
+            img.data.set(rgb[idx], o);
+            img.data[o + 3] = 255;
+        }
+    }
+    ctx.putImageData(img, 0, 0);
+}
+
+const hexColour = (c) => '#' + c.toString(16).padStart(6, '0').toUpperCase();
+
+function viewThemes(main) {
+    const zh = language() === 'zh';
+    const th = codeplug.themes;
+    const changed = () => {
+        codeplug.themesDirty = true;
+    };
+    const themeName = (pick) => (pick.user !== undefined ?
+        (th.user.find((u) => u.id === pick.user)?.name || '—') : TH.BUILTIN[pick.builtin].name[zh ? 1 : 0]);
+    const current = () => {
+        if (themePick.user !== undefined) {
+            const u = th.user.find((x) => x.id === themePick.user);
+            if (u) {
+                return {pick: themePick, colours: u.colours, dark: u.dark, user: u};
+            }
+            themePick = {builtin: 0};
+        }
+        const b = th.builtin[themePick.builtin];
+        return {pick: themePick, colours: TH.builtinColours(th, themePick.builtin), dark: b.dark, builtin: b};
+    };
+    const list = el('div', {class: 'items'});
+    const editor = el('div', {class: 'card drawer theme-editor'});
+    const canvas = el('canvas', {class: 'theme-screen', width: SCREEN_WIDTH, height: SCREEN_HEIGHT});
+    const screens = el('div', {class: 'theme-screens'});
+    const SCREEN_NAMES = {vfo: 'VFO', channel: t('channels'), menu: t('themeMenu'), options: t('themeOptions'),
+        quick: t('themeQuick'), fm: t('themeFm')};
+
+    function swatches(colours) {
+        return el('span', {class: 'swatches'}, [0, 6, 7, 8, 9, 13].map((i) =>
+            el('i', {style: `background:${hexColour(colours[i])}`})));
+    }
+
+    function addUser(from) {
+        const id = TH.freeUserId(th);
+        if (id === null) {
+            toast(t('themesFull'));
+            return;
+        }
+        const base = from ?? current();
+        th.user.push({id, name: TH.fitName(`${themeName(base.pick)} 2`), dark: base.dark, colours: [...base.colours]});
+        themePick = {user: id};
+        changed();
+        draw();
+    }
+
+    function drawList() {
+        const row = (pick, name, colours, opts) => el('div', {
+            class: 'item theme-item' + (((pick.user ?? -1) === (themePick.user ?? -1) &&
+                (pick.builtin ?? -1) === (themePick.builtin ?? -1)) ? ' selected' : '') + (opts.hidden ? ' hidden-theme' : ''),
+            onclick: () => {
+                themePick = pick;
+                draw();
+            },
+        }, swatches(colours), el('span', {class: 'theme-name'}, name),
+        opts.tag ? el('span', {class: 'tag'}, opts.tag) : null);
+        list.replaceChildren(
+            el('div', {class: 'group-title'}, t('themesBuiltin')),
+            ...TH.BUILTIN.map((b, id) => row({builtin: id}, b.name[zh ? 1 : 0], TH.builtinColours(th, id), {
+                hidden: th.builtin[id].hidden,
+                tag: th.builtin[id].hidden ? t('themeHiddenTag') : (th.builtin[id].colours ? t('themeChangedTag') : null),
+            })),
+            el('div', {class: 'group-title'}, `${t('themesMine')} (${th.user.length} / ${TH.USER_THEMES_MAX})`),
+            ...th.user.map((u) => row({user: u.id}, u.name || '—', u.colours, {})),
+            ...(th.user.length ? [] : [el('div', {class: 'muted small', style: 'padding:6px 10px'}, t('themesNoneYet'))]));
+    }
+
+    function drawEditor() {
+        const c = current();
+        const edit = (fn) => {
+            const first = c.builtin && !c.builtin.colours;
+            if (first) { // a built-in theme's first change: its own colours copied
+                c.builtin.colours = [...TH.BUILTIN[themePick.builtin].colours];
+            }
+            fn(c.builtin ? c.builtin.colours : c.user.colours);
+            changed();
+            if (first) { // its "back to its own colours" button now
+                draw();
+                return;
+            }
+            drawList();
+            drawWarnings();
+            drawScreen(canvas, current().colours, current().dark);
+        };
+        const warnings = el('div', {class: 'theme-warnings'});
+        function drawWarnings() {
+            const low = TH.lowContrast(current().colours);
+            warnings.replaceChildren(...(low.length ? [el('div', {class: 'muted small'}, t('themeLowContrast')),
+                ...low.map((w) => el('div', {class: 'warn-text small'},
+                    `${TH.ROLES[w.a].name[zh ? 0 : 1]} / ${TH.ROLES[w.b].name[zh ? 0 : 1]}: ${w.ratio.toFixed(1)} : 1` +
+                    ` (${t('themeAtLeast')} ${w.min})`))] : [el('div', {class: 'muted small'}, t('themeContrastOk'))]));
+        }
+        const rows = TH.ROLES.map((role, i) => {
+            const picker = el('input', {type: 'color', value: hexColour(c.colours[i]).toLowerCase()});
+            const hex = el('input', {class: 'mono hex', value: hexColour(c.colours[i]), spellcheck: false, maxLength: 7});
+            const set = (v) => edit((colours) => {
+                colours[i] = v;
+                picker.value = hexColour(v).toLowerCase();
+                hex.value = hexColour(v);
+            });
+            picker.addEventListener('input', () => set(parseInt(picker.value.slice(1), 16)));
+            hex.addEventListener('change', () => {
+                const m = /^#?([0-9a-f]{6})$/i.exec(hex.value.trim());
+                if (!m) {
+                    hex.classList.add('invalid');
+                    toast(t('badValue'));
+                    return;
+                }
+                hex.classList.remove('invalid');
+                set(parseInt(m[1], 16));
+            });
+            return el('div', {class: 'theme-role'}, picker, hex,
+                el('div', {class: 'theme-role-text'}, el('div', {}, role.name[zh ? 0 : 1]),
+                    el('div', {class: 'muted small'}, role.use[zh ? 0 : 1])));
+        });
+        const head = c.user ? [
+            field(t('name'), (() => {
+                const input = el('input', {value: c.user.name, maxLength: 16, spellcheck: false});
+                input.addEventListener('change', () => {
+                    c.user.name = TH.fitName(input.value.trim());
+                    input.value = c.user.name;
+                    changed();
+                    drawList();
+                });
+                return input;
+            })(), {wide: true}),
+        ] : [];
+        editor.replaceChildren(
+            el('div', {class: 'drawer-head'}, el('h3', {}, themeName(themePick)),
+                c.user ? iconButton('trash', t('delete'), () => {
+                    if (confirm(t('themeDeleteAsk'))) {
+                        th.user = th.user.filter((u) => u !== c.user);
+                        themePick = {builtin: 0};
+                        changed();
+                        draw();
+                    }
+                }, 'danger') : null),
+            el('div', {class: 'section'},
+                el('div', {class: 'fields'}, ...head,
+                    field(t('themeKind'), select([[1, t('themeDark')], [0, t('themeLight')]], c.dark ? 1 : 0, (v) => {
+                        if (c.builtin && !c.builtin.colours) {
+                            c.builtin.colours = [...TH.BUILTIN[themePick.builtin].colours];
+                        }
+                        (c.builtin ?? c.user).dark = v === '1';
+                        changed();
+                        draw();
+                    }))),
+                c.builtin ? check(t('themeHide'), c.builtin.hidden, (v) => {
+                    const shown = TH.BUILTIN.filter((b, id) => !th.builtin[id].hidden).length;
+                    if (v && shown <= 1 && !th.user.length) {
+                        toast(t('themeLastShown'));
+                        draw();
+                        return;
+                    }
+                    c.builtin.hidden = v;
+                    changed();
+                    drawList();
+                }) : null,
+                el('div', {class: 'theme-actions'},
+                    button(t('themeCopy'), 'copy', () => addUser(current()), 'ghost'),
+                    (c.builtin && c.builtin.colours) ? button(t('themeRestore'), null, () => {
+                        c.builtin.colours = null;
+                        c.builtin.dark = TH.BUILTIN[themePick.builtin].dark;
+                        changed();
+                        draw();
+                    }, 'ghost') : null)),
+            el('div', {class: 'section'}, el('h4', {}, t('themeColours')), warnings, ...rows));
+        drawWarnings();
+    }
+
+    function drawScreens() {
+        screens.replaceChildren(...Object.keys(SCREENS).map((name) => el('button', {
+            class: 'chip' + (name === themeScreen ? ' active' : ''),
+            onclick: () => {
+                themeScreen = name;
+                drawScreens();
+                drawScreen(canvas, current().colours, current().dark);
+            },
+        }, SCREEN_NAMES[name] ?? name)));
+    }
+
+    function draw() {
+        drawList();
+        drawEditor();
+        drawScreens();
+        drawScreen(canvas, current().colours, current().dark);
+    }
+
+    main.append(
+        pageHead(t('themes'), el('span', {class: 'spacer'}),
+            button(t('themesFactory'), null, () => {
+                if (TH.isDefault(th) || !confirm(t('themesFactoryAsk'))) {
+                    return;
+                }
+                codeplug.themes = TH.emptyThemes();
+                themePick = {builtin: 0};
+                changed();
+                render();
+            }, 'ghost'),
+            button(t('themeNew'), 'plus', () => addUser(null), 'primary')),
+        el('p', {class: 'muted', style: 'margin:0 0 10px'}, t('themesIntro')),
+        el('div', {class: 'work'},
+            el('div', {class: 'card', style: 'width:250px;flex:none'}, list),
+            editor,
+            el('div', {class: 'card theme-preview'}, screens, canvas,
+                el('div', {class: 'muted small'}, t('themePreviewNote')))));
     draw();
 }
 

@@ -1,2 +1,2 @@
 // The version of this editor (CHANGELOG.md; tagged v<VERSION> in git)
-export const VERSION = '0.8.3';
+export const VERSION = '0.9.0';
