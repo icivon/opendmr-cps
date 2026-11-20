@@ -453,7 +453,6 @@ const TEXTS = {
     iconAlternate: ['副表 \\', 'Alternate \\', 'Secundaria \\'],
     aprsIcon: ['图标字符', 'Icon character', 'Carácter de icono'],
     aprsSymbolChart: ['APRS 符号表', 'APRS symbol chart', 'Tabla de símbolos APRS'],
-    unknownSymbol: ['未知符号', 'Unknown symbol', 'Símbolo desconocido'],
     comment: ['注释', 'Comment', 'Comentario'],
     ambiguity: ['位置模糊', 'Position ambiguity', 'Ambigüedad de posición'],
     usePosition: ['用固定位置（不用 GPS）', 'Fixed position (not the GPS)', 'Posición fija (no GPS)'],
