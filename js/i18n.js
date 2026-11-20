@@ -296,6 +296,8 @@ const TEXTS = {
     iconPrimary: ['主表 /', 'Primary /'],
     iconAlternate: ['副表 \\', 'Alternate \\'],
     aprsIcon: ['图标字符', 'Icon character'],
+    aprsSymbolChart: ['APRS 符号表', 'APRS symbol chart'],
+    unknownSymbol: ['未知符号', 'Unknown symbol'],
     comment: ['注释', 'Comment'],
     ambiguity: ['位置模糊', 'Position ambiguity'],
     usePosition: ['用固定位置（不用 GPS）', 'Fixed position (not the GPS)'],

@@ -16,6 +16,9 @@
 - 码表文件保存 / 打开
 - CSV 导入 / 导出，格式和 OpenGD77 CPS 一样（信道、区域、联系人、TG 列表、APRS），可以直接导入 OpenGD77 的 CSV，也可以把别的软件的信道表改成这个格式导入（[说明](docs/csv.md)）
 - 中文 / English 界面，深色模式
+- APRS 图标按标准主表 / 和副表 \\ 选择，仍以电台原始符号码读写
+
+APRS 图标说明采用 [aprs-symbol-index](https://github.com/hessu/aprs-symbol-index)，作者 Hessu Hannikainen，许可 CC BY-SA 4.0。
 
 ## 使用
 
