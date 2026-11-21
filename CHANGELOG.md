@@ -1,5 +1,16 @@
 # Changelog / 版本记录
 
+## 0.10.0 (2026-11-20)
+
+- M17 channels (firmware with M17, opendmr_mode 0xA6): the mode in the channel and VFO editors, the CSV files
+  (Channel Type `M17`); a channel's CAN (0 - 15, column `CAN`). M17 transmits to ALL from the callsign under General.
+  Before, an M17 channel read into the CPS and written back became a DMR channel.
+  M17 信道（带 M17 的固件，opendmr_mode 0xA6）：信道和 VFO 编辑、CSV（Channel Type `M17`）都可以选；信道的 CAN（0 - 15，
+  `CAN` 列）。M17 发射的目的是广播 ALL，源呼号是“常规”里的呼号。以前 M17 信道经 CPS 读写一次会变成 DMR 信道。
+- DMR ID database: a sector write that fails is retried at lower cable speeds, and the speed in use is shown while
+  writing ([#9](https://github.com/va3bpf/opendmr-cps/pull/9), [#10](https://github.com/va3bpf/opendmr-cps/pull/10)).
+  DMR ID 数据库：某个扇区写入失败时自动降低写频线速度重试，写入时显示当前速度。
+
 ## 0.9.0 (2026-11-19)
 
 - Themes page: make your own colour themes for the radio (up to 8), recolour a built-in theme or hide it from the
